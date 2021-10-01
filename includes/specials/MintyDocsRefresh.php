@@ -1,16 +1,19 @@
 <?php
 
 /**
- * @author Yaron Koren
+ * MintyDocsRefresh allows previously published content to be re-saved to update stored content (ex: Cargo) or to fix timing-related parser issues (ex: #mintydocs_link).
+ * Code is based very heavily on existing MintyDocsPublish functions.
+ * 
+ * @author Ed Jamer
  */
 
-class MintyDocsPublish extends SpecialPage {
+class MintyDocsRefresh extends SpecialPage {
 
-	protected static $mNoActionNeededMessage = "Nothing to publish.";
-	protected static $mEditSummaryMsg = "mintydocs-publish-editsummary";
-	protected static $mSuccessMsg = "mintydocs-publish-success";
-	protected static $mSinglePageMsg = "mintydocs-publish-singlepage";
-	protected static $mButtonMsg = "mintydocs-publish-button";
+	protected static $mNoActionNeededMessage = "Nothing to refresh.";
+	protected static $mEditSummaryMsg = "mintydocs-refresh-editsummary";
+	protected static $mSuccessMsg = "mintydocs-refresh-success";
+	protected static $mSinglePageMsg = "mintydocs-refresh-singlepage";
+	protected static $mButtonMsg = "mintydocs-refresh-button";
 	private static $mCheckboxNumber = 1;
 
 	/**
@@ -18,22 +21,13 @@ class MintyDocsPublish extends SpecialPage {
 	 */
 	function __construct( $pageName = null ) {
 		if ( $pageName == null ) {
-			$pageName = 'MintyDocsPublish';
+			$pageName = 'MintyDocsRefresh';
 		}
 		parent::__construct( $pageName );
 	}
 
-	function generateSourceTitle( $sourcePageName ) {
-		return Title::newFromText( $sourcePageName, MD_NS_DRAFT );
-	}
-
 	function generateTargetTitle( $targetPageName ) {
 		return Title::newFromText( $targetPageName, NS_MAIN );
-	}
-
-	function generateParentTargetTitle( $fromParentTitle ) {
-		$fromParentPageName = $fromParentTitle->getText();
-		return $this->generateTargetTitle( $fromParentPageName );
 	}
 
 	function execute( $query ) {
@@ -43,7 +37,7 @@ class MintyDocsPublish extends SpecialPage {
 
 		if ( $query == '' ) {
 			$pageName = $req->getVal( 'titleText' );
-			$query = $this->generateSourceTitle( $pageName );
+			$query = $this->generateTargetTitle( $pageName );
 		}
 
 		try {
@@ -60,8 +54,8 @@ class MintyDocsPublish extends SpecialPage {
 			return;
 		}
 
-		$publish = $req->getCheck( 'mdPublish' );
-		if ( $publish ) {
+		$refresh = $req->getCheck( 'mdRefresh' );
+		if ( $refresh ) {
 			// Guard against cross-site request forgeries (CSRF).
 			$validToken = $this->getUser()->matchEditToken( $req->getVal( 'csrf' ), $this->getName() );
 			if ( !$validToken ) {
@@ -70,7 +64,7 @@ class MintyDocsPublish extends SpecialPage {
 				return;
 			}
 
-			$this->publishAll();
+			$this->refreshAll();
 			return;
 		}
 
@@ -101,8 +95,8 @@ class MintyDocsPublish extends SpecialPage {
 	}
 
 	function validateTitle( $title ) {
-		if ( $title->getNamespace() != MD_NS_DRAFT ) {
-			throw new MWException( 'Must be a Draft page!' );
+		if ( $title->getNamespace() == MD_NS_DRAFT ) {
+			throw new MWException( 'Must be a Published page!' );
 		}
 	}
 
@@ -112,7 +106,7 @@ class MintyDocsPublish extends SpecialPage {
 		$out->enableOOUI();
 
 		// Display checkboxes.
-		$text = '<form id="mdPublishForm" action="" method="post">';
+		$text = '<form id="mdRefreshForm" action="" method="post">';
 		$text .= Html::hidden( 'titleText', $title->getText() );
 		if ( $req->getCheck( 'single' ) ) {
 			$isSinglePage = true;
@@ -122,7 +116,7 @@ class MintyDocsPublish extends SpecialPage {
 		}
 		if ( $isSinglePage ) {
 			$toTitle = $this->generateTargetTitle( $title->getText() );
-			$error = $this->validateSinglePageAction( $title, $toTitle );
+			$error = $this->validateSinglePageAction( $title );
 			if ( $error != null ) {
 				$out->addHTML( $error );
 				return;
@@ -156,7 +150,7 @@ class MintyDocsPublish extends SpecialPage {
 		$text .= Html::hidden( 'csrf', $this->getUser()->getEditToken( $this->getName() ) ) . "\n";
 		$text .= "<br />\n" . new OOUI\ButtonInputWidget(
 			[
-				'name' => 'mdPublish',
+				'name' => 'mdRefresh',
 				'type' => 'submit',
 				'flags' => [ 'progressive', 'primary' ],
 				'label' => $this->msg( self::$mButtonMsg )->parse()
@@ -167,16 +161,9 @@ class MintyDocsPublish extends SpecialPage {
 		$out->addHTML( $text );
 	}
 
-	function validateSinglePageAction( $fromTitle, $toTitle ) {
-		if ( !$toTitle->exists() ) {
-			return null;
-		}
-		$fromPage = WikiPage::factory( $fromTitle );
-		$fromPageText = $fromPage->getContent()->getNativeData();
-		$toPage = WikiPage::factory( $toTitle );
-		$toPageText = $toPage->getContent()->getNativeData();
-		if ( $fromPageText == $toPageText ) {
-			return 'There is no need to publish this page - the published version matches the draft version.';
+	function validateSinglePageAction( $pageTitle ) {
+		if ( !$pageTitle->exists() ) {
+			return "Page doesn't exist; refresh action is only possible for already published content.";
 		}
 		return null;
 	}
@@ -254,48 +241,25 @@ class MintyDocsPublish extends SpecialPage {
 	}
 
 	function displayLine( $mdPage ) {
-		// See if the parent page of this one (if there is such a thing)
-		// exists in the new location - if not, we can't publish this
-		// page.
-		$cannotBePublished = false;
-		$parentTitle = $mdPage->getParentPage();
-		if ( $parentTitle !== null ) {
-			$toParentTitle = $this->generateTargetTitle( $parentTitle->getText() );
-			if ( !$toParentTitle->exists() ) {
-				$cannotBePublished = true;
-			}
-		}
-
-		$fromTitle = $mdPage->getTitle();
-		$fromPageName = $fromTitle->getText();
-		$toTitle = $this->generateTargetTitle( $fromPageName );
+		$pageTitle = $mdPage->getTitle();
+		$pageName = $pageTitle->getText();
+		$toTitle = $this->generateTargetTitle( $pageName );
 		if ( !$toTitle->exists() ) {
-			return $this->displayLineWithCheckbox( $mdPage, $fromPageName, false, $cannotBePublished );
+			return $this->displayLineWithCheckbox( $mdPage, $pageName, false );
 		}
-		if ( !$this->overwritingIsAllowed() && $toTitle->exists() ) {
-			return $mdPage->getLink() . ' (already exists)';
-		}
-
-		$fromPage = WikiPage::factory( $fromTitle );
-		$fromPageText = $fromPage->getContent()->getNativeData();
-		$toPage = WikiPage::factory( $toTitle );
-		$toPageText = $toPage->getContent()->getNativeData();
-		// If the text of the two pages is the same, no point
-		// dislaying a checkbox.
-		if ( $fromPageText == $toPageText ) {
-			return $mdPage->getLink() . ' (no change)';
-		}
-		return $this->displayLineWithCheckbox( $mdPage, $fromPageName, true, $cannotBePublished );
+		// if page exists, currently no reason not to refresh it
+		$cannotBeRefreshed = false;
+		return $this->displayLineWithCheckbox( $mdPage, $pageName, true, $cannotBeRefreshed );
 	}
 
-	function displayLineWithCheckbox( $mdPage, $fromPageName, $toPageExists, $cannotBePublished ) {
+	function displayLineWithCheckbox( $mdPage, $pageName, $toPageExists, $cannotBeRefreshed ) {
 		$checkboxAttrs = [
 			'name' => 'page_name_' . self::$mCheckboxNumber++,
-			'value' => $fromPageName,
+			'value' => $pageName,
 			'class' => [ 'mdCheckbox' ],
 			'selected' => true
 		];
-		if ( $cannotBePublished ) {
+		if ( $cannotBeRefreshed ) {
 			$checkboxAttrs['disabled'] = true;
 		}
 		$str = new OOUI\CheckboxInputWidget( $checkboxAttrs );
@@ -304,8 +268,8 @@ class MintyDocsPublish extends SpecialPage {
 		} else {
 			$str .= '<strong>' . $mdPage->getLink() . '</strong>';
 		}
-		if ( $cannotBePublished ) {
-			$str .= ' (cannot be published because its parent page has not been published)';
+		if ( $cannotBeRefreshed ) {
+			$str .= ' (this page cannot be refreshed)';
 		}
 		return $str;
 	}
@@ -314,7 +278,7 @@ class MintyDocsPublish extends SpecialPage {
 		return true;
 	}
 
-	function publishAll() {
+	function refreshAll() {
 		$req = $this->getRequest();
 		$user = $this->getUser();
 		$out = $this->getOutput();
@@ -322,63 +286,22 @@ class MintyDocsPublish extends SpecialPage {
 		$jobs = [];
 
 		$submittedValues = $req->getValues();
-		$toTitles = [];
+		$refreshTitles = [];
 
 		foreach ( $submittedValues as $key => $val ) {
 			if ( substr( $key, 0, 10 ) != 'page_name_' ) {
 				continue;
 			}
 
-			$fromPageName = $val;
-			$fromTitle = $this->generateSourceTitle( $fromPageName );
-			$fromPage = WikiPage::factory( $fromTitle );
-			$fromPageText = $fromPage->getContent()->getNativeData();
-			$toTitle = $this->generateTargetTitle( $fromPageName );
-			$toTitles[] = $toTitle;
+			$refreshPageName = $val;
+			$refreshTitle = $this->generateTargetTitle( $refreshPageName );
+			$refreshPage = WikiPage::factory( $refreshTitle );
+			$refreshTitles[] = $refreshTitle;
 			$params = [];
 			$params['user_id'] = $user->getId();
-			$params['page_text'] = $fromPageText;
 			$params['edit_summary'] = $this->msg( self::$mEditSummaryMsg )->inContentLanguage()->text();
-
-			// If this is a MintyDocs page with a parent page, send
-			// the name of the parent page in the other namespace
-			// to the job, so the job can check whether that page
-			// exists, and cancel the save if not - we don't want to
-			// create an invalid MD page.
-			// The most likely scenario for that to happen (though
-			// not the only one) is that a whole set of pages are
-			// being created, and for some reason the saving of
-			// child pages occurs right before the saving of the
-			// parent.
-			$fromMDPage = MintyDocsUtils::pageFactory( $fromTitle );
-			if ( $fromMDPage !== null ) {
-				$fromParentTitle = $fromMDPage->getParentPage();
-				if ( $fromParentTitle !== null ) {
-					$toParentTitle = $this->generateParentTargetTitle( $fromParentTitle );
-					$toParentPageName = $toParentTitle->getFullText();
-					$params['parent_page'] = $toParentPageName;
-				}
-			}
-
-// ----------------
-// START PUBSWIKI-2431: Handling for jobs where page_text causes params array to exceed database blob size limit
-$params['page_source'] = $fromTitle;
-if ( class_exists("RevisionRecord") ) {
-	$params['revision_id'] = $fromPage->getRevisionRecord()->getId();
-}
-else {
-	$params['revision_id'] = $fromPage->getRevision()->getId();
-}
-$params['long_page'] = false;
-if ( strlen(serialize((array)$params)) >= 65535 ) {
-	// if page length exceeds blob size, db update will fail and page won't update correctly
-	$params['long_page'] = true;
-	$params['page_text'] = "";
-}
-// END PUBSWIKI-2431: Handling for jobs where page_text causes params array to exceed database blob size limit
-// ----------------
-
-			$jobs[] = new MintyDocsCreatePageJob( $toTitle, $params );
+			$params['page_source'] = $refreshTitle;
+			$jobs[] = new MintyDocsRefreshPageJob( $refreshTitle, $params );
 		}
 
 		JobQueueGroup::singleton()->push( $jobs );
@@ -386,14 +309,10 @@ if ( strlen(serialize((array)$params)) >= 65535 ) {
 		if ( count( $jobs ) == 0 ) {
 			$text = 'No pages were specified.';
 		} elseif ( count( $jobs ) == 1 ) {
-			if ( $toTitle->exists() ) {
-				$text = 'The page ' . Linker::link( $toTitle ) . ' will be modified.';
-			} else {
-				$text = 'The page ' . Linker::link( $toTitle ) . ' will be created.';
-			}
+			$text = 'The page ' . Linker::link( $refreshTitle ) . ' will be refreshed.';
 		} else {
 			$titlesStr = '';
-			foreach ( $toTitles as $i => $title ) {
+			foreach ( $refreshTitles as $i => $title ) {
 				if ( $i > 0 ) {
 					$titlesStr .= ', ';
 				}

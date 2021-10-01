@@ -351,7 +351,10 @@ class MintyDocsHooks {
 					return true;
 				}
 				list( $product, $version ) = $mdPage->getProductAndVersion();
-				$ret = $cache[$magicWordId] = $product->getDisplayName();
+				if ( empty($product) )
+					$ret = "NOPRODUCT";
+				else
+					$ret = $cache[$magicWordId] = $product->getDisplayName();
 				break;
 			case 'MAG_MINTYDOCSVERSION':
 				if ( $className == 'MintyDocsProduct' || $className == 'MintyDocsVersion' ) {
@@ -400,4 +403,56 @@ class MintyDocsHooks {
 	public static function registerPageFormsInputs( &$formPrinter ) {
 		$formPrinter->registerInputType( 'MintyDocsTOCInput' );
 	}
+
+
+	/**
+	 * Adds a contextually aware tab for MintyDocs-specific actions
+	 *
+	 * @param SkinTemplate $skinTemplate
+	 * @param array &$links
+	 * @return bool
+	 */
+	static function displayTab( SkinTemplate $skinTemplate, array &$links ) {
+		$title = $skinTemplate->getTitle();
+
+		// Page must exist to have an available MintyDocs action.
+		if ( !$title || !$title->exists() ) {
+			return true;
+		}
+
+		// MintyDocs pages only.
+		$mdPage = MintyDocsUtils::pageFactory( $title );
+		if ( !$mdPage ) {
+			return true;
+		}
+
+		$user = $skinTemplate->getUser();
+		if ( !$user || !$mdPage->userCanAdminister( $user ) ) {
+			return true;
+		}
+
+		$request = $skinTemplate->getRequest();
+
+		if ( $title->getNamespace() == MD_NS_DRAFT ) {
+			// Draft pages can be published
+			$mdPublishTab = [
+				'class' => ( $request->getVal( 'action' ) == 'mdpublish' ) ? 'selected' : '',
+				'text' => wfMessage( 'mintydocs-publish-button' )->escaped(),
+				'href' => $title->getLocalURL( 'action=mdpublish' )
+			];
+			$links['views']['mdpublish'] = $mdPublishTab;
+		}
+		else {
+			// Published pages can be refreshed
+			$mdRefreshTab = [
+				'class' => ( $request->getVal( 'action' ) == 'mdrefresh' ) ? 'selected' : '',
+				'text' => wfMessage( 'mintydocs-refresh-button' )->escaped(),
+				'href' => $title->getLocalURL( 'action=mdrefresh' )
+			];
+			$links['views']['mdrefresh'] = $mdRefreshTab;
+		}
+
+		return true;
+	}
+
 }

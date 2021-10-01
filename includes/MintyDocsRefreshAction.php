@@ -1,19 +1,19 @@
 <?php
 
 /**
- * Handles the 'mdpublish' action.
+ * Handles the 'mdrefresh' action.
  *
- * @author Yaron Koren
+ * @author Ed Jamer
  * @ingroup MintyDocs
  */
 
-class MintyDocsPublishAction extends Action {
+class MintyDocsRefreshAction extends Action {
 	/**
 	 * Return the name of the action this object responds to
 	 * @return string lowercase
 	 */
 	public function getName() {
-		return 'mdpublish';
+		return 'mdrefresh';
 	}
 
 	/**
@@ -24,8 +24,8 @@ class MintyDocsPublishAction extends Action {
 	public function show() {
 		$title = $this->page->getTitle();
 
-		$mdPublishPage = new MintyDocsPublish();
-		$mdPublishPage->execute( $title );
+		$mdRefreshPage = new MintyDocsRefresh();
+		$mdRefreshPage->execute( $title );
 	}
 
 }

@@ -123,4 +123,7 @@ class MintyDocsDelete extends SpecialPage {
 		$out->addHTML( $text );
 	}
 
+	protected function getGroupName() {
+		return 'mintydocs';
+	}
 }

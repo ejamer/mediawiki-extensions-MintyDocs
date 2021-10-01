@@ -90,17 +90,30 @@ abstract class MintyDocsPage {
 		$productNameParts = array_slice( $pageNameParts, 0, $numProductNameParts );
 		$productName = implode( '/', $productNameParts );
 
-		$versionString = $pageNameParts[$numProductNameParts];
+//		$versionString = $pageNameParts[$numProductNameParts];
+		$versionString = '';
+		if ( $numProductNameParts>=0 ) {
+			$versionString = $pageNameParts[$numProductNameParts];
+		}
+		if (empty($productName)) {
+			$productName = $versionString;
+		}
 
 		return [ $productName, $versionString ];
 	}
 
 	public function getProductAndVersion() {
 		list( $productName, $versionString ) = $this->getProductAndVersionStrings();
-		$productPage = Title::newFromText( $productName );
-		$product = new MintyDocsProduct( $productPage );
-		$versionPage = Title::newFromText( $productName . '/' . $versionString );
-		$version = new MintyDocsVersion( $versionPage );
+		if (empty($productName)){
+			$product = '';
+			$version = '';
+		}
+		else {
+			$productPage = Title::newFromText( $productName );
+			$product = new MintyDocsProduct( $productPage );
+			$versionPage = Title::newFromText( $productName . '/' . $versionString );
+			$version = new MintyDocsVersion( $versionPage );
+		}
 		return [ $product, $version ];
 	}
 
@@ -187,6 +200,7 @@ abstract class MintyDocsPage {
 	}
 
 	function getActualName() {
+		// needs a fix for standalone pages (in case they have slashes in page title)
 		$pageName = $this->mTitle->getPrefixedText();
 		$lastSlashPos = strrpos( $pageName, '/' );
 		if ( $lastSlashPos === false ) {
@@ -200,13 +214,23 @@ abstract class MintyDocsPage {
 	}
 
 	public function getParentPage() {
+		$pageType = MintyDocsUtils::getPageType( $this->mTitle );
 		$pageName = $this->mTitle->getPrefixedText();
-		$lastSlashPos = strrpos( $pageName, '/' );
-		if ( $lastSlashPos === false ) {
+		if ($pageType == 'Product'){
 			return null;
 		}
-		$parentPageName = substr( $pageName, 0, $lastSlashPos );
-		return Title::newFromText( $parentPageName );
+		else {
+			$lastSlashPos = strrpos( $pageName, '/' );
+			if ( $lastSlashPos === false ) {
+				return null;
+			}
+			$parentPageName = substr( $pageName, 0, $lastSlashPos );
+			$parentTitle = Title::newFromText( $parentPageName );
+			if ($pageType == 'Topic' && (empty($parentTitle) || MintyDocsUtils::getPageType($parentTitle)!=='Manual')) {
+				return null;
+			}
+			return $parentTitle;
+		}
 	}
 
 	public function getLink() {

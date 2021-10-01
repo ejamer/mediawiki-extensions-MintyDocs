@@ -309,161 +309,162 @@ class MintyDocsParserFunctions {
 			$pageNameParts = explode( '/', $curTitle->getText(), 3 );
 			$curTitle = Title::newFromText( $pageNameParts[2] );
 		}
-		$mdPage = MintyDocsUtils::pageFactory( $curTitle );
-		if ( $mdPage == null ) {
-			return "<div class=\"error\">#mintydocs_link must be called from a MintyDocs-enabled page.</div>";
-		}
-
-		$params = func_get_args();
-		array_shift( $params ); // We don't need the parser.
-		$processedParams = self::processParams( $parser, $params );
-
-		$product = $version = $manual = $topic = $linkText = $fragment = null;
-		$contextProduct = $contextVersion = $contextManual = null;
-		$standalone = false;
-		$outputWikitext = true;
-		foreach ( $processedParams as $paramName => $value ) {
-			if ( $paramName == 'product' ) {
-				$product = $value;
-			} elseif ( $paramName == 'version' ) {
-				$version = $value;
-			} elseif ( $paramName == 'manual' ) {
-				$manual = $value;
-			} elseif ( $paramName == 'topic' ) {
-				$topic = $value;
-			} elseif ( $paramName == 'standalone' ) {
-				$standalone = true;
-			} elseif ( $paramName == 'link text' ) {
-				$linkText = $value;
-			} elseif ( $paramName == 'fragment' ) {
-				$fragment = $value;
-			} elseif ( $paramName == 'context product' ) {
-				$contextProduct = $value;
-			} elseif ( $paramName == 'context version' ) {
-				$contextVersion = $value;
-			} elseif ( $paramName == 'context manual' ) {
-				$contextManual = $value;
-			} elseif ( $paramName == 'html' ) {
-				$outputWikitext = false;
+		if ( $curTitle->exists() ) {
+			$mdPage = MintyDocsUtils::pageFactory( $curTitle );
+			if ( $mdPage == null ) {
+				return "<div class=\"error\">#mintydocs_link must be called from a MintyDocs-enabled page (<i>" . $curTitle->getFullText()  . "</i>).</div>";
 			}
-		}
+			$params = func_get_args();
+			array_shift( $params ); // We don't need the parser.
+			$processedParams = self::processParams( $parser, $params );
 
-		// Handle links to standalone topics right away.
-		if ( $topic != null && $standalone ) {
-			$linkedPageName = self::possibleNamespacePrefix( $curTitle ) . $topic;
+			$product = $version = $manual = $topic = $linkText = $fragment = null;
+			$contextProduct = $contextVersion = $contextManual = null;
+			$standalone = false;
+			$outputWikitext = true;
+			foreach ( $processedParams as $paramName => $value ) {
+				if ( $paramName == 'product' ) {
+					$product = $value;
+				} elseif ( $paramName == 'version' ) {
+					$version = $value;
+				} elseif ( $paramName == 'manual' ) {
+					$manual = $value;
+				} elseif ( $paramName == 'topic' ) {
+					$topic = $value;
+				} elseif ( $paramName == 'standalone' ) {
+					$standalone = true;
+				} elseif ( $paramName == 'link text' ) {
+					$linkText = $value;
+				} elseif ( $paramName == 'fragment' ) {
+					$fragment = $value;
+				} elseif ( $paramName == 'context product' ) {
+					$contextProduct = $value;
+				} elseif ( $paramName == 'context version' ) {
+					$contextVersion = $value;
+				} elseif ( $paramName == 'context manual' ) {
+					$contextManual = $value;
+				} elseif ( $paramName == 'html' ) {
+					$outputWikitext = false;
+				}
+			}
+
+			// Handle links to standalone topics right away.
+			if ( $topic != null && $standalone ) {
+				$linkedPageName = self::possibleNamespacePrefix( $curTitle ) . $topic;
+				$query = [];
+				if ( $contextProduct != null ) {
+					$query['contextProduct'] = $contextProduct;
+				} elseif ( $wgRequest->getCheck( 'contextProduct' ) ) {
+					$query['contextProduct'] = $wgRequest->getVal( 'contextProduct' );
+				}
+				if ( $contextVersion != null ) {
+					$query['contextVersion'] = $contextVersion;
+				} elseif ( $wgRequest->getCheck( 'contextVersion' ) ) {
+					$query['contextVersion'] = $wgRequest->getVal( 'contextVersion ' );
+				}
+				if ( $contextManual != null ) {
+					$query['contextManual'] = $contextManual;
+				} elseif ( $wgRequest->getCheck( 'contextManual' ) ) {
+					$query['contextManual'] = $wgRequest->getVal( 'contextManual ' );
+				}
+				return self::getLinkWikitextOrHTML( $outputWikitext, $linkedPageName, $linkText, $fragment, $query );
+			}
+
+			if ( $topic != null ) {
+				$linkedPageType = 'topic';
+			} elseif ( $manual != null ) {
+				$linkedPageType = 'manual';
+			} elseif ( $version != null ) {
+				$linkedPageType = 'version';
+			} elseif ( $product != null ) {
+				$linkedPageType = 'product';
+			} else {
+				return "<div class=\"error\">At least one of product, version, manual and topic must be specified.</div>";
+			}
+
+			if ( $linkedPageType == 'product' || $linkedPageType == 'version' ) {
+				if ( $topic != null && $manual == null ) {
+					return "<div class=\"error\">A 'manual' value must be specified in this case.</div>";
+				}
+			}
+
+			if ( $linkedPageType == 'product' ) {
+				if ( $manual != null && $version == null ) {
+					return "<div class=\"error\">A 'version' value must be specified in this case.</div>";
+				}
+			}
+
+			if ( get_class( $mdPage ) == 'MintyDocsTopic' ) {
+				$curProduct = $wgRequest->getVal( 'product' );
+				$curVersion = $wgRequest->getVal( 'version' );
+				$curManual = $wgRequest->getVal( 'manual' );
+			} else {
+				$curProduct = $curVersion = $curManual = null;
+			}
+
+			// Get this page's own product, and possibly version and manual.
+			if ( get_class( $mdPage ) == 'MintyDocsProduct' ) {
+				$curProduct = $mdPage->getActualName();
+			} elseif ( get_class( $mdPage ) == 'MintyDocsVersion' ) {
+				list( $curProduct, $curVersion ) = $mdPage->getProductAndVersionStrings();
+			} elseif ( $curProduct != null && $curVersion != null && $curManual != null ) {
+				// No need to do anything; the values have already been
+				// set.
+			} elseif ( get_class( $mdPage ) == 'MintyDocsManual' ) {
+				list( $curProduct, $curVersion ) = $mdPage->getProductAndVersionStrings();
+				$curManual = $mdPage->getActualName();
+			} else { // MintyDocsTopic
+				list( $curProduct, $curVersion ) = $mdPage->getProductAndVersionStrings();
+				if ( $mdPage->getManual() ) {
+					// If it's standalone, there's no manual.
+					$curManual = $mdPage->getManual()->getActualName();
+				}
+			}
+
+			if ( $product != null ) {
+				$linkedProduct = self::possibleNamespacePrefix( $curTitle ) . $product;
+			} else {
+				$linkedProduct = $curProduct;
+			}
+			$linkedPageName = $linkedProduct;
+			if ( $linkedPageType == 'version' || $linkedPageType == 'manual' || $linkedPageType == 'topic' ) {
+				$linkedVersion = ( $version != null ) ? $version : $curVersion;
+				$linkedPageName .= '/' . $linkedVersion;
+			} else {
+				$linkedVersion = null;
+			}
+			if ( $linkedPageType == 'manual' || $linkedPageType == 'topic' ) {
+				$linkedManual = ( $manual != null ) ? $manual : $curManual;
+				$linkedPageName .= '/' . $linkedManual;
+			} else {
+				$linkedManual = null;
+			}
+			if ( $linkedPageType == 'topic' ) {
+				$linkedPageName .= '/' . $topic;
+			}
+
 			$query = [];
-			if ( $contextProduct != null ) {
+			if ( $contextProduct == null && $wgRequest->getCheck( 'contextProduct' ) ) {
+				$contextProduct = $wgRequest->getVal( 'contextProduct' );
+			}
+			if ( $contextProduct != null && $linkedProduct != null && $linkedProduct != $contextProduct ) {
 				$query['contextProduct'] = $contextProduct;
-			} elseif ( $wgRequest->getCheck( 'contextProduct' ) ) {
-				$query['contextProduct'] = $wgRequest->getVal( 'contextProduct' );
 			}
-			if ( $contextVersion != null ) {
+			if ( $contextVersion == null && $wgRequest->getCheck( 'contextVersion' ) ) {
+				$contextVersion = $wgRequest->getVal( 'contextVersion' );
+			}
+			if ( $contextVersion != null && $linkedVersion != null && $linkedVersion != $contextVersion ) {
 				$query['contextVersion'] = $contextVersion;
-			} elseif ( $wgRequest->getCheck( 'contextVersion' ) ) {
-				$query['contextVersion'] = $wgRequest->getVal( 'contextVersion ' );
 			}
-			if ( $contextManual != null ) {
+			if ( $contextManual == null && $wgRequest->getCheck( 'contextManual' ) ) {
+				$contextManual = $wgRequest->getVal( 'contextManual' );
+			}
+			if ( $contextManual != null && $linkedManual != null && $linkedManual != $contextManual ) {
 				$query['contextManual'] = $contextManual;
-			} elseif ( $wgRequest->getCheck( 'contextManual' ) ) {
-				$query['contextManual'] = $wgRequest->getVal( 'contextManual ' );
 			}
+
 			return self::getLinkWikitextOrHTML( $outputWikitext, $linkedPageName, $linkText, $fragment, $query );
 		}
-
-		if ( $topic != null ) {
-			$linkedPageType = 'topic';
-		} elseif ( $manual != null ) {
-			$linkedPageType = 'manual';
-		} elseif ( $version != null ) {
-			$linkedPageType = 'version';
-		} elseif ( $product != null ) {
-			$linkedPageType = 'product';
-		} else {
-			return "<div class=\"error\">At least one of product, version, manual and topic must be specified.</div>";
-		}
-
-		if ( $linkedPageType == 'product' || $linkedPageType == 'version' ) {
-			if ( $topic != null && $manual == null ) {
-				return "<div class=\"error\">A 'manual' value must be specified in this case.</div>";
-			}
-		}
-
-		if ( $linkedPageType == 'product' ) {
-			if ( $manual != null && $version == null ) {
-				return "<div class=\"error\">A 'version' value must be specified in this case.</div>";
-			}
-		}
-
-		if ( get_class( $mdPage ) == 'MintyDocsTopic' ) {
-			$curProduct = $wgRequest->getVal( 'product' );
-			$curVersion = $wgRequest->getVal( 'version' );
-			$curManual = $wgRequest->getVal( 'manual' );
-		} else {
-			$curProduct = $curVersion = $curManual = null;
-		}
-
-		// Get this page's own product, and possibly version and manual.
-		if ( get_class( $mdPage ) == 'MintyDocsProduct' ) {
-			$curProduct = $mdPage->getActualName();
-		} elseif ( get_class( $mdPage ) == 'MintyDocsVersion' ) {
-			list( $curProduct, $curVersion ) = $mdPage->getProductAndVersionStrings();
-		} elseif ( $curProduct != null && $curVersion != null && $curManual != null ) {
-			// No need to do anything; the values have already been
-			// set.
-		} elseif ( get_class( $mdPage ) == 'MintyDocsManual' ) {
-			list( $curProduct, $curVersion ) = $mdPage->getProductAndVersionStrings();
-			$curManual = $mdPage->getActualName();
-		} else { // MintyDocsTopic
-			list( $curProduct, $curVersion ) = $mdPage->getProductAndVersionStrings();
-			if ( $mdPage->getManual() ) {
-				// If it's standalone, there's no manual.
-				$curManual = $mdPage->getManual()->getActualName();
-			}
-		}
-
-		if ( $product != null ) {
-			$linkedProduct = self::possibleNamespacePrefix( $curTitle ) . $product;
-		} else {
-			$linkedProduct = $curProduct;
-		}
-		$linkedPageName = $linkedProduct;
-		if ( $linkedPageType == 'version' || $linkedPageType == 'manual' || $linkedPageType == 'topic' ) {
-			$linkedVersion = ( $version != null ) ? $version : $curVersion;
-			$linkedPageName .= '/' . $linkedVersion;
-		} else {
-			$linkedVersion = null;
-		}
-		if ( $linkedPageType == 'manual' || $linkedPageType == 'topic' ) {
-			$linkedManual = ( $manual != null ) ? $manual : $curManual;
-			$linkedPageName .= '/' . $linkedManual;
-		} else {
-			$linkedManual = null;
-		}
-		if ( $linkedPageType == 'topic' ) {
-			$linkedPageName .= '/' . $topic;
-		}
-
-		$query = [];
-		if ( $contextProduct == null && $wgRequest->getCheck( 'contextProduct' ) ) {
-			$contextProduct = $wgRequest->getVal( 'contextProduct' );
-		}
-		if ( $contextProduct != null && $linkedProduct != null && $linkedProduct != $contextProduct ) {
-			$query['contextProduct'] = $contextProduct;
-		}
-		if ( $contextVersion == null && $wgRequest->getCheck( 'contextVersion' ) ) {
-			$contextVersion = $wgRequest->getVal( 'contextVersion' );
-		}
-		if ( $contextVersion != null && $linkedVersion != null && $linkedVersion != $contextVersion ) {
-			$query['contextVersion'] = $contextVersion;
-		}
-		if ( $contextManual == null && $wgRequest->getCheck( 'contextManual' ) ) {
-			$contextManual = $wgRequest->getVal( 'contextManual' );
-		}
-		if ( $contextManual != null && $linkedManual != null && $linkedManual != $contextManual ) {
-			$query['contextManual'] = $contextManual;
-		}
-
-		return self::getLinkWikitextOrHTML( $outputWikitext, $linkedPageName, $linkText, $fragment, $query );
 	}
 
 	/**

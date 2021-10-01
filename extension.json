@@ -1,7 +1,7 @@
 {
 	"name": "MintyDocs",
 	"namemsg": "mintydocs-extensionname",
-	"version": "0.8.1",
+	"version": "0.8.1a",
 	"author": "Yaron Koren",
 	"url": "https://www.mediawiki.org/wiki/Extension:MintyDocs",
 	"descriptionmsg": "mintydocs-desc",
@@ -55,17 +55,21 @@
 		"MintyDocsManual": "includes/MintyDocsManual.php",
 		"MintyDocsTopic": "includes/MintyDocsTopic.php",
 		"MintyDocsCreatePageJob": "includes/MintyDocsCreatePageJob.php",
+		"MintyDocsRefreshPageJob": "includes/MintyDocsRefreshPageJob.php",
 		"MintyDocsDeletePageJob": "includes/MintyDocsDeletePageJob.php",
 		"MintyDocsTOCInput": "includes/MintyDocsTOCInput.php",
 		"MintyDocsPublish": "includes/specials/MintyDocsPublish.php",
+		"MintyDocsRefresh": "includes/specials/MintyDocsRefresh.php",
 		"MintyDocsCreateDraft": "includes/specials/MintyDocsCreateDraft.php",
 		"MintyDocsCopy": "includes/specials/MintyDocsCopy.php",
 		"MintyDocsDelete": "includes/specials/MintyDocsDelete.php",
 		"MintyDocsPublishAction": "includes/MintyDocsPublishAction.php",
+		"MintyDocsRefreshAction": "includes/MintyDocsRefreshAction.php",
 		"MintyDocsPublishAPI": "includes/MintyDocsPublishAPI.php"
 	},
 	"JobClasses": {
 		"MDCreatePage": "MintyDocsCreatePageJob",
+		"MDRefreshPage": "MintyDocsRefreshPageJob",
 		"MDDeletePage": "MintyDocsDeletePageJob"
 	},
 	"APIModules": {
@@ -102,12 +106,14 @@
 	},
 	"SpecialPages": {
 		"MintyDocsPublish": "MintyDocsPublish",
+		"MintyDocsRefresh": "MintyDocsRefresh",
 		"MintyDocsCreateDraft": "MintyDocsCreateDraft",
 		"MintyDocsCopy": "MintyDocsCopy",
 		"MintyDocsDelete": "MintyDocsDelete"
 	},
 	"Actions": {
-		"mdpublish": "MintyDocsPublishAction"
+		"mdpublish": "MintyDocsPublishAction",
+		"mdrefresh": "MintyDocsRefreshAction"
 	},
 	"Hooks": {
 		"ParserFirstCallInit": "MintyDocsHooks::registerParserFunctions",
@@ -122,7 +128,7 @@
 		"MakeGlobalVariablesScript": "MintyDocsHooks::setGlobalJSVariables",
 		"MagicWordwgVariableIDs": "MintyDocsHooks::declareVarIDs",
 		"ParserGetVariableValueSwitch": "MintyDocsHooks::assignAValue",
-		"SkinTemplateNavigation": "MintyDocsPublishAction::displayTab",
+		"SkinTemplateNavigation::Universal": "MintyDocsHooks::displayTab",
 		"SearchableNamespaces": "MintyDocsHooks::makeDraftsNonSearchable",
 		"PageForms::FormPrinterSetup": "MintyDocsHooks::registerPageFormsInputs"
 	},
